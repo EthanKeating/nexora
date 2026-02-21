@@ -176,6 +176,14 @@ public class NexoraContext {
         }
     }
 
+    public void flushAllNow() {
+        flushAll();
+    }
+
+    public boolean isClosed() {
+        return closed;
+    }
+
     public <T, K> EntityRepository<T, K> getRepository(Class<T> type) {
         @SuppressWarnings("unchecked")
         EntityRepository<T, K> repo = (EntityRepository<T, K>) repositories.get(type);
