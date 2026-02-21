@@ -43,6 +43,11 @@ NexoraConfig config = NexoraConfig.builder()
     .build();
 ```
 
+More documentation:
+- `docs/CONFIG.md`
+- `docs/CACHING.md`
+- `docs/MIGRATIONS.md`
+
 ## Startup
 ```java
 NexoraContext context = NexoraContext.builder(plugin, config)
