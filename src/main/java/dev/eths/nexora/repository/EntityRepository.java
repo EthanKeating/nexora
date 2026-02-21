@@ -35,6 +35,10 @@ public class EntityRepository<T, K> {
         return loadNow(id, List.of(), EntityLoadRequest.CachePolicy.DEFAULT, null);
     }
 
+    public T getRequiredNow(K id) {
+        return getNow(id).orElseThrow();
+    }
+
     public EntityLoadRequest<T, K> get(K id) {
         return new EntityLoadRequest<>(this, id);
     }
