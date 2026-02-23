@@ -1,26 +1,35 @@
 # Nexora ORM (Bukkit/Spigot)
 
-Lightweight, async-first SQL ORM for Bukkit/Spigot plugins with explicit includes, safe schema sync, and write-through managed entities.
+Nexora is a lightweight, async-first SQL ORM for Bukkit/Spigot plugins with explicit relation includes, safe schema synchronization, and write-through managed entities.
 
 ## Features
 - Annotation-based entity mapping
-- Explicit relation includes (no lazy proxies)
-- Async DB access + Bukkit main-thread callback helpers
-- L1 Caffeine cache + optional Redis L2 with invalidation
+- Explicit relation includes, no lazy proxies
+- Async DB access with Bukkit main-thread callback helpers
+- L1 Caffeine cache with optional Redis L2 and pub/sub invalidation
 - Safe schema synchronization on startup
-- Managed entities that auto-persist on mutation
+- Managed entities with debounced write-through persistence
 - HikariCP connection pooling
 
-## Gradle setup
-This repository is already a complete Gradle project. To use as a dependency in another plugin, publish it to your repository or include as a submodule.
+## Requirements
+- Java 17
+- Spigot/Paper API for Bukkit integration (compileOnly)
+- MySQL/MariaDB or SQLite
 
-## Configuration
+## License
+GPL-3.0
+
+## Build
+```bash
+./gradlew build
+```
+
+## Quick Start
 ```java
 NexoraConfig config = NexoraConfig.builder()
     .jdbcUrl("jdbc:mysql://localhost:3306/nexora")
     .username("root")
     .password("password")
-    .driverClassName("com.mysql.cj.jdbc.Driver")
     .defaultCacheTtl(Duration.ofMinutes(5))
     .cacheMaxSize(10_000)
     .cacheMode(CacheMode.MEMORY_REDIS)
@@ -30,53 +39,46 @@ NexoraConfig config = NexoraConfig.builder()
     .migrationMode(MigrationMode.APPLY_SAFE)
     .databaseType(DatabaseType.AUTO)
     .build();
-```
 
-SQLite example:
-```java
-NexoraConfig config = NexoraConfig.builder()
-    .jdbcUrl("jdbc:sqlite:plugins/Nexora/data.db")
-    .driverClassName("org.sqlite.JDBC")
-    .cacheMode(CacheMode.MEMORY_ONLY)
-    .migrationMode(MigrationMode.APPLY_SAFE)
-    .databaseType(DatabaseType.SQLITE)
-    .build();
-```
-
-More documentation:
-- `docs/CONFIG.md`
-- `docs/CACHING.md`
-- `docs/MIGRATIONS.md`
-
-## Startup
-```java
-NexoraContext context = NexoraContext.builder(plugin, config)
+NexoraContext context = NexoraContext.builder(this, config)
     .register(Profile.class)
     .register(Clan.class)
     .build();
-```
 
-## Async load + explicit include
-```java
 context.getRepository(Profile.class)
     .get(playerUuid)
     .with(ProfileRelations.CLAN)
     .cache(Duration.ofMinutes(10))
     .async()
-    .thenAcceptSync(plugin, profileOptional -> profileOptional.ifPresent(profile -> {
+    .thenAcceptSync(this, profileOptional -> profileOptional.ifPresent(profile -> {
         Bukkit.broadcastMessage("Loaded " + profile.getProfileId());
-        profile.setCoins(profile.getCoins() + 5); // auto write-through
+        profile.setCoins(profile.getCoins() + 5); // debounced write-through
     }));
 ```
 
-## Managed entity write-through
+## Managed Entities
+Entities extend `ManagedEntity` and call `markDirty("column")` in setters to enable debounced write-through persistence.
+
 ```java
-Profile profile = new Profile(playerUuid);
-context.getRepository(Profile.class).attachNew(profile);
-profile.setCoins(100); // debounced async write-through
+@Entity(table = "profiles")
+public class Profile extends ManagedEntity<UUID> {
+    @PrimaryKey
+    @Column(name = "profile_id")
+    private UUID profileId;
+
+    @Column(name = "coins", nullable = false, defaultValue = "0")
+    private int coins;
+
+    public void setCoins(int coins) {
+        if (this.coins != coins) {
+            this.coins = coins;
+            markDirty("coins");
+        }
+    }
+}
 ```
 
-## Manual save, detach, cache control
+## Manual Save, Cache, Detach
 ```java
 Profile profile = context.getRepository(Profile.class).getNow(playerUuid).orElseThrow();
 profile.setCoins(profile.getCoins() + 100);
@@ -85,34 +87,33 @@ profile.invalidateCache();
 profile.detach();
 ```
 
-## Redis invalidation
-When Redis is enabled, all writes and deletes publish invalidation messages on the `nexora:invalidate` channel, and each instance evicts from its L1 cache.
+## Safe Schema Sync
+On startup, Nexora inspects entity metadata, compares it to the live schema, and applies safe changes only. Unsafe changes (drops, type changes, NOT NULL without default) are blocked.
 
-## Safe schema sync
-On startup, Nexora:
-1. Inspects your entity metadata
-2. Compares it to the live schema
-3. Applies safe changes only (create tables, add nullable/defaulted columns, create indexes)
-4. Blocks unsafe changes (drops, type changes, NOT NULL without default)
-
-Manual rename hints:
+Rename hints:
 ```java
-@RenamedFrom("old_column_name")
-@Column(name = "new_column_name")
-private String name;
+@RenamedFrom("old_column")
+@Column(name = "new_column")
+private String value;
 
-@TableRenamedFrom("old_table_name")
-@Entity(table = "new_table_name")
-public class Profile { ... }
+@TableRenamedFrom("old_table")
+@Entity(table = "new_table")
+public class Profile { }
 ```
 
-## Notes for plugin developers
-- DB and Redis I/O always run off the main thread.
-- Use the sync bridge (`thenAcceptSync`) for Bukkit API calls.
-- Mutators must call `markDirty("column")` (handled in included entity examples).
+## Documentation
+- `docs/README.md`
+- `docs/CONFIG.md`
+- `docs/ENTITIES.md`
+- `docs/REPOSITORIES.md`
+- `docs/RELATIONS.md`
+- `docs/CACHING.md`
+- `docs/MIGRATIONS.md`
+- `docs/THREADING.md`
 
-## Example entities
+## Example Plugin
 See:
+- `src/main/java/dev/eths/nexora/example/ExamplePlugin.java`
 - `src/main/java/dev/eths/nexora/example/entities/Profile.java`
 - `src/main/java/dev/eths/nexora/example/entities/Clan.java`
 

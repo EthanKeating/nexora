@@ -87,6 +87,7 @@ public class SchemaSynchronizer {
 
     public void apply(Connection connection, MigrationPlan plan, MigrationMode mode, Logger logger) throws Exception {
         ensureHistoryTable(connection);
+        int blocked = 0;
         for (MigrationStep step : plan.getSteps()) {
             if (step.getType() == MigrationStepType.SAFE_AUTO) {
                 logger.info("[Schema] " + step.getDescription() + " -> " + step.getSql());
@@ -98,7 +99,11 @@ public class SchemaSynchronizer {
             } else {
                 // Unsafe changes are intentionally blocked unless the operator intervenes.
                 logger.warning("[Schema] BLOCKED: " + step.getDescription());
+                blocked++;
             }
+        }
+        if (blocked > 0) {
+            logger.warning("[Schema] Blocked changes: " + blocked);
         }
         if (plan.hasBlockedSteps() && mode == MigrationMode.APPLY_SAFE) {
             throw new IllegalStateException("Blocked schema changes detected. See log for details.");

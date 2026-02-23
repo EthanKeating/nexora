@@ -1,8 +1,8 @@
-# Configuration Guide
+# Configuration
 
-Nexora is configured through `NexoraConfig` with a builder API.
+Nexora is configured through `NexoraConfig` and its builder API.
 
-## MySQL / MariaDB
+## Example: MySQL or MariaDB
 ```java
 NexoraConfig config = NexoraConfig.builder()
     .jdbcUrl("jdbc:mysql://localhost:3306/nexora")
@@ -19,7 +19,7 @@ NexoraConfig config = NexoraConfig.builder()
     .build();
 ```
 
-## SQLite
+## Example: SQLite
 ```java
 NexoraConfig config = NexoraConfig.builder()
     .jdbcUrl("jdbc:sqlite:plugins/Nexora/data.db")
@@ -29,6 +29,24 @@ NexoraConfig config = NexoraConfig.builder()
     .build();
 ```
 
-## Cache modes
-- `MEMORY_ONLY`: Local Caffeine cache only.
-- `MEMORY_REDIS`: Local cache + Redis L2 and pub/sub invalidation.
+## Options and Defaults
+- `jdbcUrl` (required): JDBC connection string.
+- `username`: DB username. Default: `null`.
+- `password`: DB password. Default: `null`.
+- `driverClassName`: JDBC driver class. Default: inferred from `jdbcUrl` and `databaseType`.
+- `defaultCacheTtl`: Default cache TTL. Default: `5 minutes`.
+- `cacheMaxSize`: L1 cache entry limit. Default: `10_000`.
+- `cacheMode`: Cache mode. Default: `MEMORY_ONLY`.
+- `redisHost`: Redis host. Default: `127.0.0.1`.
+- `redisPort`: Redis port. Default: `6379`.
+- `redisPassword`: Redis password. Default: `null`.
+- `redisChannel`: Redis invalidation channel. Default: `nexora:invalidate`.
+- `autoFlushDebounceMs`: Debounce delay for write-through. Default: `50`.
+- `writeRetryCount`: Number of write retries. Default: `2`.
+- `executorThreads`: DB executor threads. Default: `4`.
+- `migrationMode`: Schema sync mode. Default: `APPLY_SAFE`.
+- `databaseType`: SQL dialect. Default: `AUTO`.
+
+## Notes
+- If `driverClassName` is not set, Nexora infers it from `jdbcUrl` or `databaseType`.
+- With `databaseType = AUTO`, `jdbc:sqlite:` picks SQLite, otherwise MySQL.
