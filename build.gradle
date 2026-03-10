@@ -1,9 +1,10 @@
 plugins {
     id 'java'
+    id 'maven-publish'
 }
 
 group = 'dev.eths'
-version = '1.0.0'
+version = '1.0.1-SNAPSHOT'
 
 java {
     toolchain {
@@ -13,6 +14,24 @@ java {
 
 repositories {
     mavenCentral()
+
+    maven {
+        url = uri("http://164.132.206.188:8081/repository/maven-releases/")
+        allowInsecureProtocol = true
+        credentials {
+            username = findProperty("nexusUser") ?: System.getenv("NEXUS_USER")
+            password = findProperty("nexusPass") ?: System.getenv("NEXUS_PASS")
+        }
+    }
+    maven {
+        url = uri("http://164.132.206.188:8081/repository/maven-snapshots/")
+        allowInsecureProtocol = true
+        credentials {
+            username = findProperty("nexusUser") ?: System.getenv("NEXUS_USER")
+            password = findProperty("nexusPass") ?: System.getenv("NEXUS_PASS")
+        }
+    }
+
     maven { url 'https://hub.spigotmc.org/nexus/content/repositories/snapshots/' }
     maven { url 'https://repo.papermc.io/repository/maven-public/' }
 }
@@ -34,4 +53,26 @@ dependencies {
 
 test {
     useJUnitPlatform()
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+        }
+    }
+
+    repositories {
+        maven {
+            name = "nexus"
+            url = uri(version.toString().endsWith("-SNAPSHOT")
+                    ? "http://164.132.206.188:8081/repository/maven-snapshots/"
+                    : "http://164.132.206.188:8081/repository/maven-releases/")
+            allowInsecureProtocol = true
+            credentials {
+                username = findProperty("nexusUser") ?: System.getenv("NEXUS_USER")
+                password = findProperty("nexusPass") ?: System.getenv("NEXUS_PASS")
+            }
+        }
+    }
 }

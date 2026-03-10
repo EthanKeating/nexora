@@ -24,6 +24,7 @@ import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
 
 import javax.sql.DataSource;
+import java.lang.reflect.Method;
 import java.lang.reflect.Field;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -83,19 +84,16 @@ public class NexoraContext {
         if (dataSource != null) {
             return;
         }
-        HikariConfig hikari = new HikariConfig();
-        hikari.setJdbcUrl(config.getJdbcUrl());
-        if (config.getUsername() != null) {
-            hikari.setUsername(config.getUsername());
+
+        try {
+            this.dataSource = createDataSource(false);
+        } catch (AbstractMethodError e) {
+            if (!isLikelyLegacySqlite()) {
+                throw e;
+            }
+            logger.warning("SQLite legacy driver compatibility detected. Retrying Hikari with legacy-safe validation settings.");
+            this.dataSource = createDataSource(true);
         }
-        if (config.getPassword() != null) {
-            hikari.setPassword(config.getPassword());
-        }
-        if (config.getDriverClassName() != null) {
-            hikari.setDriverClassName(config.getDriverClassName());
-        }
-        hikari.setMaximumPoolSize(Math.max(2, config.getExecutorThreads()));
-        this.dataSource = new HikariDataSource(hikari);
 
         this.dbExecutor = Executors.newFixedThreadPool(config.getExecutorThreads(), r -> {
             Thread t = new Thread(r, "nexora-db");
@@ -111,6 +109,50 @@ public class NexoraContext {
         initCache();
         runSchemaSync();
         initRepositories();
+    }
+
+    private HikariDataSource createDataSource(boolean legacyFallback) {
+        HikariConfig hikari = new HikariConfig();
+        hikari.setJdbcUrl(config.getJdbcUrl());
+        if (config.getUsername() != null) {
+            hikari.setUsername(config.getUsername());
+        }
+        if (config.getPassword() != null) {
+            hikari.setPassword(config.getPassword());
+        }
+        if (config.getDriverClassName() != null) {
+            hikari.setDriverClassName(config.getDriverClassName());
+        }
+        hikari.setMaximumPoolSize(Math.max(2, config.getExecutorThreads()));
+        if (legacyFallback) {
+            hikari.setConnectionTestQuery("SELECT 1");
+            disableJdbc4Validation(hikari);
+        }
+        return new HikariDataSource(hikari);
+    }
+
+    private boolean isLikelyLegacySqlite() {
+        String driverClass = config.getDriverClassName();
+        String url = config.getJdbcUrl();
+        if (driverClass != null && driverClass.toLowerCase().contains("sqlite")) {
+            return true;
+        }
+        return url != null && url.toLowerCase().startsWith("jdbc:sqlite:");
+    }
+
+    private void disableJdbc4Validation(HikariConfig hikari) {
+        String[] methods = {"setUseJdbc4ConnectionTest", "setUseJdbc4Validation", "setJdbc4ConnectionTest"};
+        for (String methodName : methods) {
+            try {
+                Method method = HikariConfig.class.getMethod(methodName, boolean.class);
+                method.invoke(hikari, false);
+                return;
+            } catch (NoSuchMethodException ignored) {
+                // Method not present in this HikariCP version.
+            } catch (Exception ignored) {
+                // Any reflection issue is non-fatal; connectionTestQuery handles this fallback.
+            }
+        }
     }
 
     private void initRepositories() {
